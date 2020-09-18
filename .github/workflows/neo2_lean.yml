@@ -1,4 +1,4 @@
-name: neo2 Lean版openwrt
+name: neo2 Lean版 openwrt
 
 on:
   push:
