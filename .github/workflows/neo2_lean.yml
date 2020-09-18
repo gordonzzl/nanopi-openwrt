@@ -1,0 +1,66 @@
+name: neo2 Lean版openwrt
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/neo2_lean.yml'
+  watch:
+    types: started
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+    if: github.repository == 'gordonzzl/nanopi-openwrt'
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@master
+        with:
+          ref: master
+
+      - name: Initialization Environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: . 1_initialization_environment.sh
+
+      - name: Clone Source
+        run: . 2_clone_source.sh master h5
+
+      - name: Mods
+        run: |
+          cd friendlywrt-h5
+          . ../remove_unused_config.sh
+          cat ../app_config.seed >> configs/config_h5
+          cd friendlywrt
+          git remote add upstream https://github.com/coolsnowwolf/openwrt && git fetch upstream
+          git checkout upstream/lede-17.01 -b tmp
+          #git checkout 33f7cb735300bd9a099995236ed768c8925fec75 -- target/linux/sunxi/image/
+          git rm README.md
+          git commit -m 'reset'
+          git checkout master
+          git rebase 90bb1cf9c33e73de5019686b8bd495f689e675a4^ --onto tmp -X theirs
+          rm -f target/linux/allwinner-h5/patches-4.14/0001-net-thunderx-workaround-BGX-TX-Underflow-issue.patch target/linux/generic/hack-4.14/999-net-patch-linux-kernel-to-support-shortcut-fe.patch
+          git checkout upstream/lede-17.01 -- feeds.conf.default && sed -i -E 's/#(src-git.+)(helloworld.+)/\1\2/' feeds.conf.default
+          cd package/lean/
+          . ../../../../3_prepare_packages.sh
+          cd ../../
+          git apply ../../enable_autocore.diff
+          . ../../5_mods.sh
+      - name: Build FriendlyWrt
+        run: . 4_build_image.sh friendlywrt-h5 nanopi_r1s.mk
+
+      - name: Assemble Artifact
+        id: assemble_artifact
+        run: |
+          . x_assemble_artifact.sh
+          release_tag="NEO2-Lean-$(date +%Y-%m-%d)"
+          echo "##[set-output name=release_tag;]$release_tag"
+      - name : Upload artifact
+        uses: actions/upload-artifact@master
+        with:
+          name: FriendlyWrt_NanoPi-NEO2
+          path: ./artifact/
